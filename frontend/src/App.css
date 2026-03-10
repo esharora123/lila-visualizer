@@ -1,42 +1,105 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: #0a0a0f;
+}
+
+/* ── Header ── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 52px;
+  background: #0f0f1a;
+  border-bottom: 1px solid #1e1e3a;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+  font-size: 18px;
+  font-weight: 700;
+  color: #00d4ff;
+  letter-spacing: 2px;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.subtitle {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.match-pills {
+  display: flex;
+  gap: 8px;
 }
 
-.card {
-  padding: 2em;
+.pill {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.read-the-docs {
+.pill.map     { background: #1a2a3a; color: #00d4ff; border: 1px solid #00d4ff44; }
+.pill.humans  { background: #1a2a1a; color: #7fff00; border: 1px solid #7fff0044; }
+.pill.kills   { background: #2a1a1a; color: #ff6b35; border: 1px solid #ff6b3544; }
+.pill.loot    { background: #2a2a1a; color: #ffd700; border: 1px solid #ffd70044; }
+
+.version {
+  font-size: 11px;
+  color: #444;
+}
+
+/* ── Body ── */
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Map area ── */
+.map-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #050508;
+}
+
+/* ── Loading ── */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0fcc;
+  z-index: 50;
+  gap: 16px;
   color: #888;
+  font-size: 14px;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #1e1e3a;
+  border-top-color: #00d4ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
