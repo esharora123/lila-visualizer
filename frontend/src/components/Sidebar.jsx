@@ -210,18 +210,18 @@ function MatchCard({ match, selected, onClick }) {
         }}>
           {mapShort[match.map_id]}
         </span>
-        <span style={{ fontSize: 10, color: '#444' }}>
+        <span style={{ fontSize: 10, color: '#666' }}>
           {match.day?.replace('February_', 'Feb ')}
         </span>
       </div>
       <div style={{ 
-        fontSize: 10, color: '#555', 
+        fontSize: 10, color: '#888', 
         fontFamily: 'monospace',
         marginBottom: 5,
       }}>
         {match.match_id.slice(0, 18)}...
       </div>
-      <div style={{ display: 'flex', gap: 8, fontSize: 10 }}>
+      <div style={{ display: 'flex', gap: 8, fontSize: 12 }}>
         <span style={{ color: '#7fff00' }}>👤{match.human_count}</span>
         <span style={{ color: '#cc44ff' }}>⚔️{match.bot_kills}</span>
         <span style={{ color: '#ffd700' }}>📦{match.loot_count}</span>

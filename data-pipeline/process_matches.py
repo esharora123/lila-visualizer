@@ -28,9 +28,12 @@ def ts_to_ms(ts_val):
     """Convert timestamp to milliseconds integer safely"""
     try:
         ts = pd.Timestamp(ts_val)
-        # These timestamps are match-elapsed time from epoch
-        # Extract raw milliseconds directly
-        return int(ts.value // 1_000_000)
+        # Try nanoseconds first (pandas default)
+        ns = ts.value
+        if ns > 0:
+            return int(ns // 1_000_000)
+        # Fallback: use total seconds
+        return int(ts.timestamp() * 1000)
     except:
         return 0
 
@@ -61,104 +64,100 @@ def build_file_map():
 
 # ── PROCESS ONE MATCH ────────────────────────────────────
 def process_match(match_id, filepaths):
-    """
-    Returns a dict with:
-    - players: list of {user_id, is_human, color}
-    - positions: list of {user_id, x, z, ts_ms}  ← movement trail
-    - events: list of {user_id, event, x, z, ts_ms}  ← kills/loot/deaths
-    - meta: {map_id, duration_ms, human_count, bot_count}
-    """
     all_dfs = []
-    
     for fp in filepaths:
         df = load_file(fp)
         if df is not None and len(df) > 0:
             all_dfs.append(df)
-    
+
     if not all_dfs:
         return None
-    
+
     combined = pd.concat(all_dfs, ignore_index=True)
-    
+
     # ── Players ──
     humans = combined[combined['user_id'].apply(
         lambda x: is_human(str(x)))]['user_id'].unique()
-    bots   = combined[~combined['user_id'].apply(
+    bots = combined[~combined['user_id'].apply(
         lambda x: is_human(str(x)))]['user_id'].unique()
 
-    # Assign colors to human players
     HUMAN_COLORS = ['#00d4ff','#ff6b35','#7fff00','#ff00ff',
                     '#ffd700','#ff1493','#00ff9f','#ff4444']
     players = []
     color_map = {}
-    
+
     for i, uid in enumerate(humans):
         color = HUMAN_COLORS[i % len(HUMAN_COLORS)]
         color_map[str(uid)] = color
-        players.append({
-            'user_id':  str(uid),
-            'is_human': True,
-            'color':    color
-        })
+        players.append({'user_id': str(uid), 'is_human': True, 'color': color})
     for uid in bots:
         color_map[str(uid)] = '#888888'
-        players.append({
-            'user_id':  str(uid),
-            'is_human': False,
-            'color':    '#888888'
-        })
+        players.append({'user_id': str(uid), 'is_human': False, 'color': '#888888'})
 
-    # ── Timestamps: normalize to 0-based ms ──
-    all_ts = combined['ts'].dropna()
-    ts_min_ms = ts_to_ms(all_ts.min())
-    ts_max_ms = ts_to_ms(all_ts.max())
-    duration_ms = max(ts_max_ms - ts_min_ms, 0)
+    # ── Normalize timestamps to 0 → TIMELINE_MS range ──
+    # Raw timestamps span milliseconds — we stretch to 5 minutes
+    # so playback feels natural in the browser
+    TIMELINE_MS = 300_000  # 5 minutes visual timeline
 
-    # ── Positions (movement trail) ──
+    def raw_ms(ts_val):
+        """Get raw ms value from timestamp"""
+        try:
+            return int(pd.Timestamp(ts_val).value // 1_000_000)
+        except:
+            return 0
+
+    all_ts_raw = combined['ts'].dropna().apply(raw_ms)
+    ts_min = all_ts_raw.min()
+    ts_max = all_ts_raw.max()
+    ts_range = ts_max - ts_min if ts_max > ts_min else 1
+
+    def normalize_ts(ts_val):
+        """Normalize raw timestamp to 0-TIMELINE_MS range"""
+        raw = raw_ms(ts_val)
+        return int(((raw - ts_min) / ts_range) * TIMELINE_MS)
+
+    # ── Positions ──
     pos_events = ['Position', 'BotPosition']
     pos_df = combined[combined['event'].isin(pos_events)].copy()
-    
+
     positions = []
     for _, row in pos_df.iterrows():
-        ts_ms = ts_to_ms(row['ts']) - ts_min_ms  # normalize to 0-based
         positions.append({
             'user_id': str(row['user_id']),
             'x':       round(float(row['x']), 2),
             'z':       round(float(row['z']), 2),
-            'ts_ms':   ts_ms
+            'ts_ms':   normalize_ts(row['ts']),
         })
 
-    # ── Events (kills, loot, deaths) ──
+    # ── Events ──
     special_events = ['Kill','Killed','BotKill','BotKilled',
                       'KilledByStorm','Loot']
     ev_df = combined[combined['event'].isin(special_events)].copy()
-    
+
     events = []
     for _, row in ev_df.iterrows():
-        ts_ms = ts_to_ms(row['ts']) - ts_min_ms
         events.append({
             'user_id': str(row['user_id']),
             'event':   row['event'],
             'x':       round(float(row['x']), 2),
             'z':       round(float(row['z']), 2),
-            'ts_ms':   ts_ms
+            'ts_ms':   normalize_ts(row['ts']),
         })
 
-    # ── Meta ──
     map_id = combined['map_id'].iloc[0]
-    
+
     return {
-        'match_id':    match_id,
-        'map_id':      map_id,
+        'match_id': match_id,
+        'map_id':   map_id,
         'meta': {
-            'map_id':       map_id,
-            'duration_ms':  duration_ms,
-            'human_count':  len(humans),
-            'bot_count':    len(bots),
-            'kill_count':   len(combined[combined['event']=='Kill']),
-            'botkill_count':len(combined[combined['event']=='BotKill']),
-            'loot_count':   len(combined[combined['event']=='Loot']),
-            'storm_deaths': len(combined[combined['event']=='KilledByStorm']),
+            'map_id':        map_id,
+            'duration_ms':   TIMELINE_MS,
+            'human_count':   len(humans),
+            'bot_count':     len(bots),
+            'kill_count':    len(combined[combined['event']=='Kill']),
+            'botkill_count': len(combined[combined['event']=='BotKill']),
+            'loot_count':    len(combined[combined['event']=='Loot']),
+            'storm_deaths':  len(combined[combined['event']=='KilledByStorm']),
         },
         'players':   players,
         'positions': positions,

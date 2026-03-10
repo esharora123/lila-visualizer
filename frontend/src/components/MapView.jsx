@@ -24,11 +24,11 @@ const EVENT_CONFIG = {
 }
 
 const HEATMAP_COLORS = {
-  kills:   (t) => `rgba(255, ${Math.floor(50*(1-t))}, 0, ${t * 0.85})`,
-  deaths:  (t) => `rgba(255, ${Math.floor(100*(1-t))}, 150, ${t * 0.85})`,
-  loot:    (t) => `rgba(255, ${Math.floor(200 + 55*t)}, 0, ${t * 0.85})`,
-  traffic: (t) => `rgba(0, ${Math.floor(150 + 105*t)}, 255, ${t * 0.75})`,
-  storm:   (t) => `rgba(0, 255, ${Math.floor(200 + 55*t)}, ${t * 0.9})`,
+  kills:   (t) => `rgba(255, ${Math.floor(30*(1-t))}, 30, ${t * 0.9})`,
+  deaths:  (t) => `rgba(255, ${Math.floor(140*t)}, 0, ${t * 0.85})`,
+  loot:    (t) => `rgba(255, ${Math.floor(180 + 75*t)}, 0, ${t * 0.85})`,
+  traffic: (t) => `rgba(30, ${Math.floor(100 + 155*t)}, 255, ${t * 0.8})`,
+  storm:   (t) => `rgba(180, 0, 255, ${t * 0.9})`,
 }
 
 function worldToCanvas(x, z, mapId, canvasSize) {
@@ -43,8 +43,8 @@ function worldToCanvas(x, z, mapId, canvasSize) {
 }
 
 export default function MapView({ 
-  matchData, mapId, showHeatmap, heatmapData, activeLayer 
-}) {
+  matchData, mapId, showHeatmap, heatmapData, activeLayer, currentTime 
+}) { 
   const canvasRef   = useRef(null)
   const imgRef      = useRef(null)
   const [imgLoaded, setImgLoaded] = useState(false)
@@ -103,21 +103,28 @@ export default function MapView({
       const colorFn = HEATMAP_COLORS[activeLayer] || HEATMAP_COLORS.traffic
 
       cells.forEach(([gx, gy, intensity]) => {
-        ctx.fillStyle = colorFn(intensity)
-        ctx.fillRect(
-          gx * cellPx - cellPx/2,
-          gy * cellPx - cellPx/2,
-          cellPx * 1.5,
-          cellPx * 1.5
-        )
-      })
+      const cx = gx * cellPx
+      const cy = gy * cellPx
+      const radius = cellPx * 1.2
+
+      const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius)
+      gradient.addColorStop(0, colorFn(intensity))
+      gradient.addColorStop(1, 'transparent')
+
+      ctx.beginPath()
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+      ctx.fillStyle = gradient
+      ctx.fill()
+    })
     }
 
     if (!matchData) return
 
-    // 4. Draw movement trails (positions)
+    // 4. Draw movement trails — only up to currentTime
     const playerPositions = {}
-    matchData.positions.forEach(pos => {
+    matchData.positions
+    .filter(pos => pos.ts_ms <= currentTime)
+    .forEach(pos => {
       if (!playerPositions[pos.user_id]) 
         playerPositions[pos.user_id] = []
       playerPositions[pos.user_id].push(pos)
@@ -151,8 +158,10 @@ export default function MapView({
       ctx.globalAlpha = 1
     })
 
-    // 5. Draw event markers
-    matchData.events.forEach(ev => {
+    // 5. Draw event markers — only up to currentTime
+    matchData.events
+    .filter(ev => ev.ts_ms <= currentTime)
+    .forEach(ev => {
       const cfg = EVENT_CONFIG[ev.event]
       if (!cfg) return
       const { px, py } = worldToCanvas(ev.x, ev.z, mapId, S)
@@ -195,7 +204,7 @@ export default function MapView({
     })
 
   }, [matchData, mapId, showHeatmap, heatmapData, 
-      activeLayer, imgLoaded, canvasSize])
+      activeLayer, imgLoaded, canvasSize, currentTime])
 
   // Tooltip on hover
   const handleMouseMove = (e) => {
@@ -267,7 +276,7 @@ export default function MapView({
       {/* Legend */}
       <div style={{
         position: 'absolute',
-        bottom: 16, right: 16,
+        bottom: 135, right: 16,
         background: '#0f0f1acc',
         border: '1px solid #1e1e3a',
         borderRadius: 8,

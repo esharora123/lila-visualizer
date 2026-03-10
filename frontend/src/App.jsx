@@ -1,17 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import MapView from './components/MapView'
 import Sidebar from './components/Sidebar'
+import Timeline from './components/Timeline'
 import './App.css'
 
 export default function App() {
-  const [matches, setMatches]           = useState([])
+  const [matches, setMatches]             = useState([])
   const [selectedMatch, setSelectedMatch] = useState(null)
-  const [matchData, setMatchData]       = useState(null)
-  const [selectedMap, setSelectedMap]   = useState('AmbroseValley')
-  const [activeLayer, setActiveLayer]   = useState('traffic') 
-  const [showHeatmap, setShowHeatmap]   = useState(false)
-  const [heatmapData, setHeatmapData]   = useState(null)
-  const [loading, setLoading]           = useState(false)
+  const [matchData, setMatchData]         = useState(null)
+  const [selectedMap, setSelectedMap]     = useState('AmbroseValley')
+  const [activeLayer, setActiveLayer]     = useState('traffic')
+  const [showHeatmap, setShowHeatmap]     = useState(false)
+  const [heatmapData, setHeatmapData]     = useState(null)
+  const [loading, setLoading]             = useState(false)
+
+  // Timeline state
+  const [currentTime, setCurrentTime] = useState(0)
+  const [isPlaying, setIsPlaying]     = useState(false)
+  const [playSpeed, setPlaySpeed]     = useState(1)
+  const [duration, setDuration]       = useState(0)
+  const animFrameRef                  = useRef(null)
+  const lastTickRef                   = useRef(null)
 
   // Load matches index on startup
   useEffect(() => {
@@ -19,9 +28,7 @@ export default function App() {
       .then(r => r.json())
       .then(data => {
         setMatches(data)
-        // Auto-load hero match
-        const hero = data.find(m => 
-          m.match_id.startsWith('b3550292'))
+        const hero = data.find(m => m.match_id.startsWith('b3550292'))
         if (hero) setSelectedMatch(hero.match_id)
       })
       .catch(err => console.error('Failed to load index:', err))
@@ -31,11 +38,21 @@ export default function App() {
   useEffect(() => {
     if (!selectedMatch) return
     setLoading(true)
+    setIsPlaying(false)
+    setCurrentTime(0)
+
     fetch(`/data/matches/${selectedMatch}.json`)
       .then(r => r.json())
       .then(data => {
         setMatchData(data)
         setSelectedMap(data.map_id)
+
+        // Calculate duration from events (more reliable than positions)
+        const posTs    = data.positions.map(p => p.ts_ms).filter(t => t > 0)
+        const eventTs  = data.events.map(e => e.ts_ms).filter(t => t > 0)
+        // Duration is always 300,000ms (normalized in pipeline)
+        setDuration(data.meta.duration_ms || 300000)
+        setCurrentTime(maxTs) // start showing full match
         setLoading(false)
       })
       .catch(err => {
@@ -48,9 +65,58 @@ export default function App() {
   useEffect(() => {
     fetch(`/data/heatmaps/${selectedMap}.json`)
       .then(r => r.json())
-      .then(data => setHeatmapData(data))
-      .catch(err => console.error('Failed to load heatmap:', err))
+      .then(setHeatmapData)
+      .catch(() => {})
   }, [selectedMap])
+
+  // Playback engine — runs every animation frame when playing
+  useEffect(() => {
+    if (!isPlaying) {
+      cancelAnimationFrame(animFrameRef.current)
+      lastTickRef.current = null
+      return
+    }
+
+    const tick = (timestamp) => {
+      if (lastTickRef.current === null) {
+        lastTickRef.current = timestamp
+      }
+
+      const elapsed = timestamp - lastTickRef.current
+      lastTickRef.current = timestamp
+
+      setCurrentTime(prev => {
+        const next = prev + elapsed * playSpeed * 8
+        if (next >= duration) {
+          setIsPlaying(false)
+          return duration
+        }
+        return next
+      })
+
+      animFrameRef.current = requestAnimationFrame(tick)
+    }
+
+    animFrameRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(animFrameRef.current)
+  }, [isPlaying, playSpeed, duration])
+
+  const handlePlayPause = () => {
+    // If at end, restart from beginning
+    if (currentTime >= duration) setCurrentTime(0)
+    setIsPlaying(p => !p)
+  }
+
+  const handleSeek = (ms) => {
+    setCurrentTime(ms)
+    lastTickRef.current = null
+  }
+
+  const handleRestart = () => {
+    setCurrentTime(0)
+    setIsPlaying(true)
+    lastTickRef.current = null
+  }
 
   return (
     <div className="app-shell">
@@ -72,6 +138,11 @@ export default function App() {
               <span className="pill loot">
                 📦 {matchData.meta.loot_count} loot
               </span>
+              {matchData.meta.storm_deaths > 0 && (
+                <span className="pill storm">
+                  🌪️ {matchData.meta.storm_deaths} storm
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -101,13 +172,29 @@ export default function App() {
               <p>Loading match data...</p>
             </div>
           )}
+
           <MapView
             matchData={matchData}
             mapId={selectedMap}
             showHeatmap={showHeatmap}
             heatmapData={heatmapData}
             activeLayer={activeLayer}
+            currentTime={currentTime}
           />
+
+          {matchData && (
+            <Timeline
+              duration={duration}
+              currentTime={currentTime}
+              isPlaying={isPlaying}
+              playSpeed={playSpeed}
+              matchData={matchData}
+              onSeek={handleSeek}
+              onPlayPause={handlePlayPause}
+              onRestart={handleRestart}
+              onSpeedChange={setPlaySpeed}
+            />
+          )}
         </main>
       </div>
     </div>
