@@ -122,7 +122,14 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div className="header-left">
-          <span className="logo">⬡ LILA BLACK</span>
+          <div className="header-logo">
+            <img 
+              src="https://lilagames.com/wp-content/uploads/2023/05/LILA-LOGO-1-77x77.png"
+              alt="Lila Games"
+              style={{ height: 28, width: 28, objectFit: 'contain' }}
+            />
+            <span className="logo">LILA BLACK</span>
+          </div>
           <span className="subtitle">Level Design Analytics</span>
         </div>
         <div className="header-center">
